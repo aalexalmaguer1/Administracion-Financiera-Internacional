@@ -1,0 +1,41 @@
+---
+title: "Prueba VAR"
+author: "Alejandro Almaguer"
+date: "2023-05-19"
+output: html_document
+---
+
+# Load the necessary libraries
+```{r}
+library(PerformanceAnalytics)
+library(dplyr)
+library(tidyquant)
+library(quantmod)
+library(tseries)
+library(tidyverse)
+
+```
+
+# Import the data
+```{r}
+getSymbols("MXN=X", src = "yahoo", frequency("Monthly"))
+USDMXN <- na.omit(`MXN=X`)
+```
+```{r}
+USDMXN.Adjusted <- na.omit(USDMXN$`MXN=X.Adjusted`)
+```
+
+# Calculate the daily returns
+```{r}
+returns <- diff(log(USDMXN.Adjusted))
+```
+
+#Estimate the VAR
+```{r}
+var <- VaR(returns, p = 0.01, method = "gaussian")
+```
+# Print the VaR
+```{r}
+print(var)
+```
+

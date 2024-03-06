@@ -1,0 +1,92 @@
+---
+title: "Montecarlo prueba"
+author: "Alejandro Almaguer"
+date: "2023-06-01"
+output: html_document
+---
+
+```{r}
+install.packages("quantmod")
+library(quantmod)
+library(zoo)
+```
+#### 1. Parámetros para simular precios
+#Vamos a descargar precios del SPY y calcular el μ y σ a utilizar en nuestra simulación calculando el retorno promedio anualizado y la volatilidad anualizada.
+```{r}
+MXNUSD <- getSymbols("MXN=X", auto.assign=FALSE)
+MXNUSD <- Ad(MXNUSD)
+MXNUSD <- MXNUSD[endpoints(MXNUSD, "months")]
+
+rets <- log(MXNUSD/lag(MXNUSD))
+
+mu <- mean(rets, na.rm=TRUE)*12
+sigma <- sd(rets, na.rm=TRUE)*sqrt(12)
+S0 <- as.numeric(tail(MXNUSD, 1))
+
+print(paste("μ:", mu))
+print(paste("σ:", sigma))
+```
+###2. Función para simular precios
+#Recordemos que en el tutorial dijimos que:
+
+St+Δt=SteμΔt+σZΔt√ 
+
+Así que hagamos una función que haga exactamente este procedimiento:
+
+```{r}
+sim <- function(S0, mu, sigma, periods_in_year=12, years=1, scenarios=10) {
+  steps <- years*periods_in_year
+  dt <- 1/periods_in_year
+  
+  z_rets <- matrix(rnorm(steps*scenarios, mean=mu*dt, sd=sigma*sqrt(dt)),
+                   nrow=steps, ncol=scenarios)
+  S = S0*apply(1+z_rets, 2, cumprod)
+  
+  return(S)
+}
+```
+
+#Lo primero que tenemos que hacer es calcular los pasos que vamos a dar en nuestros caminos de precios (steps). Por default, vamos a simular 1 año (years=1) con 12 pasos (periods_in_year=12). O sea que estamos calculando 1 año de manera mensual.
+
+#Después de esto calculamos Δt (dt) que es igual a 1/periods_in_year.
+
+#z_rets contiene los retornos aleatorios. Si se fijan, estoy muestreando 120 retornos aleatorios por default (steps=12)*(scenarios=10) = 12 * 10 = 120. Si eligen más escenarios, más años o mayor granularidad, este número puede incrementar rápidamente.
+
+#Por último, calculamos cada uno de los pasos usando la función cumprod en cada uno de los escenarios.
+
+###3. Simular y graficar precios
+#Ahora sí, usemos la función anterior para simular y graficar precios.
+
+```{r}
+scenarios <- 1e4
+years <- 1.5
+periods <- 12
+S <- sim(S0, mu, sigma, scenarios=scenarios, years=years,
+         periods_in_year=periods)
+last_date <- tail(index(MXNUSD), 1)
+dates <- seq(last_date, length.out=years*12 + 1, by="months")
+
+total_xts <- rbind(MXNUSD, xts(S[, 1], order.by=dates[-1]))
+total_xts <- merge(total_xts,
+                   xts(rbind(rep(S0, scenarios - 1), S[, -1]),
+                       order.by=dates))
+plot(total_xts["2019-12-31/",1:100], main="Simulación de precios del MXN/USD")
+
+hist(S[years*12,], prob=TRUE, main="Distribución MXN/USD",
+     xlab="Precio", ylab="Densidad")
+lines(density(S[years*12,]), col="red", lwd=2)
+abline(v=S0, lwd=2, lty=2, col="green")
+abline(v=mean(total_xts[dim(total_xts)[1],]), lwd=2, lty=2, col="blue")
+legend("topright", cex = 1,
+       legend = c("Precio inicial", "Precio final promedio"),
+       lty = 2, col = c("green", "blue"), lwd = 2,
+       title = "Precios", box.lty = 0)
+```
+
+#Vemos que la distribución de los precios finales simulados es lognormal. Ahora sólo falta comprobar que las medias esperada y observada estén relativamente cerca:
+
+```{r}
+print(paste("media esperada:", S0*exp(mu*years)))
+print(paste("media observada:", mean(total_xts[dim(total_xts)[1],])))
+```
+
